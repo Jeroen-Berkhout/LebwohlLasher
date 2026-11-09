@@ -33,7 +33,8 @@ import matplotlib as mpl
 def initdat(nmax):
     """
     Arguments:
-      nmax (int) = size of lattice to create (nmax,nmax).
+      nmax (int) = size o
+        lattice to create (nmax,nmax).
     Description:
       Function to create and initialise the main data array that holds
       the lattice.  Will return a square lattice (size nmax x nmax)
@@ -274,36 +275,34 @@ def MC_step(arr,Ts,nmax):
         first_mask = np.indices((nmax,nmax)).sum(axis=0) % 2
         second_mask = 1 - first_mask
         aran = np.random.normal(scale=scale, size=(nmax,nmax))
+        # Invert roll direction to intended since shift you go from original -> neighbour similar to a function translation in F(x+dx)
         up = np.roll(arr, -1, axis=0)
         down = np.roll(arr, 1, axis=0)
         left = np.roll(arr, -1, axis=1)
         right = np.roll(arr, 1, axis=1)
-        directions = [up, down, left, right]
-        # Inverted since shift you go from original -> neighbour similar to a function translation in F(x+dx)
+        directions = [up, down, left, right] 
+        en0 = np.zeros((nmax,nmax))
+        en1 = np.zeros((nmax,nmax))
         for mask in [first_mask, second_mask]:
             # Energy of each site with its 4 neighbours (same as one_energy), kept only where mask == 1
             for direction in directions:
-                en0 = bond_energys(arr, direction)
+                en0 += bond_energys(arr, direction)
             en0 = en0 * mask
-
+            
             # Trial lattice: only sites where mask == 1 are rotated (aran * 0 = no change elsewhere).
             # Neighbours of masked sites are all off-mask, so up/down/left/right are still valid.
             trial = arr + aran * mask
             for direction in directions:
-                en1 = bond_energys(trial, direction)
+                en1 += bond_energys(trial, direction)
             en1 = en1 * mask
 
-            # Metropolis test: exp( -(E_new - E_old) / T* ) >= rand(0,1)
+            # Metropolis / montecarlo test: exp( -(E_new - E_old) / T* ) >= rand(0,1)
             # Off-mask sites have deltaE = 0 (boltz = 1), so AND with mask to exclude them.
             boltz = np.exp(-(en1 - en0) / Ts)
             accepted = (mask == 1) & (boltz >= np.random.uniform(0.0, 1.0, size=(nmax, nmax)))
             arr[accepted] = trial[accepted]
             accept += np.sum(accepted)
-            #Could be marginally faster (?) by avoiding the trial lattice and just adding the angle to arr where accepted, but this is more readable.
-
-
-
-
+            # print(f"Mask acceptance ratio: {np.sum(accepted) / np.sum(mask):.3f}")
     return accept/(nmax*nmax)
 #=======================================================================
 def main(program, nsteps, nmax, temp, pflag):
@@ -324,9 +323,9 @@ def main(program, nsteps, nmax, temp, pflag):
     # Plot initial frame of lattice
     plotdat(lattice,pflag,nmax)
     # Create arrays to store energy, acceptance ratio and order parameter
-    energy = np.zeros(nsteps+1,dtype=np.float)
-    ratio = np.zeros(nsteps+1,dtype=np.float)
-    order = np.zeros(nsteps+1,dtype=np.float)
+    energy = np.zeros(nsteps+1)
+    ratio = np.zeros(nsteps+1)
+    order = np.zeros(nsteps+1)
     # Set initial values in arrays
     energy[0] = all_energy(lattice)
     ratio[0] = 0.5 # ideal value
