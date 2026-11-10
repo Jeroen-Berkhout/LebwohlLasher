@@ -165,6 +165,9 @@ def one_energy(arr,ix,iy,nmax):
 def all_energy(arr,nmax):
     """
     Arguments:
+    # Changes:
+        Removed max, made it call .shape
+        
 	  arr (float(nmax,nmax)) = array that contains lattice data;
       nmax (int) = side length of square lattice.
     Description:
@@ -272,9 +275,9 @@ def main(program, nsteps, nmax, temp, pflag):
     # Plot initial frame of lattice
     plotdat(lattice,pflag,nmax)
     # Create arrays to store energy, acceptance ratio and order parameter
-    energy = np.zeros(nsteps+1,dtype=np.dtype)
-    ratio = np.zeros(nsteps+1,dtype=np.dtype)
-    order = np.zeros(nsteps+1,dtype=np.dtype)
+    energy = np.zeros(nsteps+1)
+    ratio = np.zeros(nsteps+1)
+    order = np.zeros(nsteps+1)
     # Set initial values in arrays
     energy[0] = all_energy(lattice,nmax)
     ratio[0] = 0.5 # ideal value
