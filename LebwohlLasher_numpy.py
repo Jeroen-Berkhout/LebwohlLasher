@@ -190,31 +190,25 @@ def all_energy(arr):
     return (2*(horizontal_energy.sum() + vertical_energy.sum())) # Multiply by 2 to account for double counting of bonds
 #=======================================================================
 def get_order(arr,nmax):
-    """
-    Arguments:
-	  arr (float(nmax,nmax)) = array that contains lattice data;
-      nmax (int) = side length of square lattice.
-    Description:
-      Function to calculate the order parameter of a lattice
-      using the Q tensor approach, as in equation (3) of the
-      project notes.  Function returns S_lattice = max(eigenvalues(Q_ab)).
-	Returns:
-	  max(eigenvalues(Qab)) (float) = order parameter for lattice.
-    """
-    Qab = np.zeros((3,3))
-    delta = np.eye(3,3)
-    #
-    # Generate a 3D unit vector for each cell (i,j) and
-    # put it in a (3,i,j) array.
-    #
-    lab = np.vstack((np.cos(arr),np.sin(arr),np.zeros_like(arr))).reshape(3,nmax,nmax)
-    for a in range(3):
-        for b in range(3):
-            for i in range(nmax):
-                for j in range(nmax):
-                    Qab[a,b] += 3*lab[a,i,j]*lab[b,i,j] - delta[a,b]
-    Qab = Qab/(2*nmax*nmax)
-    eigenvalues,eigenvectors = np.linalg.eig(Qab)
+
+   # Identity matrix (the delta_ab term)
+    delta = np.eye(3)
+
+    # Turn each angle into a unit vector (x, y, z) with z = 0
+    x = np.cos(arr)                                                                                                                                                                                                                                                                                                                                                                                                                                           
+    y = np.sin(arr)
+    z = np.zeros_like(arr)
+    lab = np.array([x, y, z])
+
+    # Multiply every pair of components together and add them up over the
+    # whole lattice. This does the same job as the 4 nested loops above.
+    products = np.einsum('aij,bij->ab', lab, lab)
+
+    # Build the Q tensor. The delta term gets added once per lattice site,so it is multiplied by the number of sites (nmax*nmax).
+    Qab = (3 * products - nmax * nmax * delta) / (2 * nmax * nmax)
+    
+    # The order parameter is the biggest eigenvalue of Q
+    eigenvalues = np.linalg.eigvalsh(Qab)
     return eigenvalues.max()
 #=======================================================================
 def MC_step(arr,Ts,nmax):
@@ -268,22 +262,25 @@ def MC_step(arr,Ts,nmax):
                     else:
                         arr[ix,iy] -= ang
     else:
-        # Pre-compute some random numbers and neighbours for each mask at once. 
+        # Pre-compute some random numbers for both masks at once.
         # Masks are since the lattice is bipartite, we can update one mask at a time.
         scale=0.1+Ts
         accept = 0
         first_mask = np.indices((nmax,nmax)).sum(axis=0) % 2
         second_mask = 1 - first_mask
         aran = np.random.normal(scale=scale, size=(nmax,nmax))
-        # Invert roll direction to intended since shift you go from original -> neighbour similar to a function translation in F(x+dx)
-        up = np.roll(arr, -1, axis=0)
-        down = np.roll(arr, 1, axis=0)
-        left = np.roll(arr, -1, axis=1)
-        right = np.roll(arr, 1, axis=1)
-        directions = [up, down, left, right] 
-        en0 = np.zeros((nmax,nmax))
-        en1 = np.zeros((nmax,nmax))
         for mask in [first_mask, second_mask]:
+            # Neighbours must be rebuilt for each mask: the first mask's update changes
+            # arr, and those changed cells are exactly the second mask's neighbours.
+            # Invert roll direction to intended since shift you go from original -> neighbour similar to a function translation in F(x+dx)
+            up = np.roll(arr, -1, axis=0)
+            down = np.roll(arr, 1, axis=0)
+            left = np.roll(arr, -1, axis=1)
+            right = np.roll(arr, 1, axis=1)
+            directions = [up, down, left, right]
+            en0 = np.zeros((nmax,nmax))
+            en1 = np.zeros((nmax,nmax))
+
             # Energy of each site with its 4 neighbours (same as one_energy), kept only where mask == 1
             for direction in directions:
                 en0 += bond_energys(arr, direction)
