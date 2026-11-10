@@ -397,7 +397,7 @@ def MC_step(local,Ts,nmax,masks,counts,displs):
       at the start of the step, in the same order as the numpy version, and
       each rank is sent its section of the flattened 1D arrays. This keeps
       the lattice identical to the numpy version for any number of ranks.
-      Ghost rows are refreshed before each mask, and up/down come from the
+      Ghost rows (haolos) are refreshed before each mask, and up/down come from the
       ghost rows instead of np.roll(axis=0).
       Masks are passed in (built once in main() from global row numbers).
       Accepted counts are added together on rank 0.
@@ -474,7 +474,7 @@ def MC_step(local,Ts,nmax,masks,counts,displs):
         return total_accept/(nmax*nmax)
     return None
 #=======================================================================
-def main(program, nsteps, nmax, temp, pflag, seed=None, save=True):
+def main(program, nsteps, nmax, temp, pflag, seeded=0, save=True):
     """
     Changes from numpy version:
       Run by every rank. Rank 0 makes the lattice and sends each rank its
@@ -483,7 +483,7 @@ def main(program, nsteps, nmax, temp, pflag, seed=None, save=True):
       Odd sizes gather the lattice on rank 0 for MC_step_odd each step.
       Timing uses MPI.Wtime() between barriers instead of time.time().
       Only rank 0 stores results, prints, saves and plots.
-      New optional seed and save arguments, and returns the results
+      New optional seeded and save arguments, and returns the results
       (useful for tests).
     Arguments:
       program (string) = the name of the program;
@@ -491,7 +491,7 @@ def main(program, nsteps, nmax, temp, pflag, seed=None, save=True):
       nmax (int) = side length of square lattice to simulate;
       temp (float) = reduced temperature (range 0 to 2);
       pflag (int) = a flag to control plotting;
-      seed (int) = optional random seed (useful for comparing with serial);
+      seeded (int) = if 1, seed the random numbers with 42 (same as the numpy version);
       save (bool) = whether to write the output file.
     Description:
       This is the main function running the Lebwohl-Lasher simulation.
@@ -504,8 +504,8 @@ def main(program, nsteps, nmax, temp, pflag, seed=None, save=True):
         sys.exit(1)
 
     # Only rank 0 makes random numbers, so only rank 0 needs the seed
-    if rank == 0 and seed is not None:
-        np.random.seed(seed)
+    if rank == 0 and seeded:
+        np.random.seed(42)
 
     # Work out which rows this rank owns
     rows_per_rank, starts, counts, displs = split_rows(nmax)
@@ -581,14 +581,15 @@ def main(program, nsteps, nmax, temp, pflag, seed=None, save=True):
 # main simulation function.
 #
 if __name__ == '__main__':
-    if int(len(sys.argv)) == 5:
+    if int(len(sys.argv)) in (5, 6):
         PROGNAME = sys.argv[0]
         ITERATIONS = int(sys.argv[1])
         SIZE = int(sys.argv[2])
         TEMPERATURE = float(sys.argv[3])
         PLOTFLAG = int(sys.argv[4])
-        main(PROGNAME, ITERATIONS, SIZE, TEMPERATURE, PLOTFLAG)
+        SEEDED = int(sys.argv[5]) if len(sys.argv) == 6 else 0
+        main(PROGNAME, ITERATIONS, SIZE, TEMPERATURE, PLOTFLAG, SEEDED)
     else:
         if rank == 0:
-            print("Usage: mpiexec -n <NPROCS> python {} <ITERATIONS> <SIZE> <TEMPERATURE> <PLOTFLAG>".format(sys.argv[0]))
+            print("Usage: mpiexec -n <NPROCS> python {} <ITERATIONS> <SIZE> <TEMPERATURE> <PLOTFLAG> [SEEDED]".format(sys.argv[0]))
 #=======================================================================

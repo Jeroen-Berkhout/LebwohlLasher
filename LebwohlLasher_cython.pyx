@@ -282,19 +282,23 @@ def MC_step(double[:, :] lattice, double Ts, int nmax):
                     lattice[row, col] -= change
     return accept/(nmax*nmax)
 #=======================================================================
-def main(program, nsteps, nmax, temp, pflag):
+def main(program, nsteps, nmax, temp, pflag, seeded=0):
     """
     Arguments:
 	  program (string) = the name of the program;
 	  nsteps (int) = number of Monte Carlo steps (MCS) to perform;
       nmax (int) = side length of square lattice to simulate;
 	  temp (float) = reduced temperature (range 0 to 2);
-	  pflag (int) = a flag to control plotting.
+	  pflag (int) = a flag to control plotting;
+	  seeded (int) = if 1, seed the random numbers with 42 for reproducible runs.
     Description:
       This is the main function running the Lebwohl-Lasher simulation.
     Returns:
       NULL
     """
+    # Seed before initdat so the starting lattice is reproducible too
+    if seeded:
+        np.random.seed(42)
     # Create and initialise lattice
     lattice = initdat(nmax)
     # Plot initial frame of lattice
@@ -327,13 +331,14 @@ def main(program, nsteps, nmax, temp, pflag):
 # main simulation function.
 #
 if __name__ == '__main__':
-    if int(len(sys.argv)) == 5:
+    if int(len(sys.argv)) in (5, 6):
         PROGNAME = sys.argv[0]
         ITERATIONS = int(sys.argv[1])
         SIZE = int(sys.argv[2])
         TEMPERATURE = float(sys.argv[3])
         PLOTFLAG = int(sys.argv[4])
-        main(PROGNAME, ITERATIONS, SIZE, TEMPERATURE, PLOTFLAG)
+        SEEDED = int(sys.argv[5]) if len(sys.argv) == 6 else 0
+        main(PROGNAME, ITERATIONS, SIZE, TEMPERATURE, PLOTFLAG, SEEDED)
     else:
-        print("Usage: python {} <ITERATIONS> <SIZE> <TEMPERATURE> <PLOTFLAG>".format(sys.argv[0]))
+        print("Usage: python {} <ITERATIONS> <SIZE> <TEMPERATURE> <PLOTFLAG> [SEEDED]".format(sys.argv[0]))
 #=======================================================================
