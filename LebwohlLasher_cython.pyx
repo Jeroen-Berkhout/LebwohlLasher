@@ -232,6 +232,9 @@ def get_order(lattice, int nmax):
 @cython.wraparound(False)
 def MC_step(double[:, :] lattice, double Ts, int nmax):
     """
+    Changes:
+        Split into even and odd lattice sizes, for even sizes we can use a bipartite update scheme, which is faster.
+
     Arguments:
       lattice (float(nmax,nmax)) = array that contains lattice data;
       Ts (float) = reduced temperature (range 0 to 2);
@@ -250,36 +253,69 @@ def MC_step(double[:, :] lattice, double Ts, int nmax):
     cdef int i, j, row, col
     cdef int accept = 0
     cdef double change, energy_before, energy_after, boltzmann
+    cdef long[:, :] random_rows, random_cols, mask
+    cdef double[:, :] random_changes, aran, uran
+    cdef double old, trial, en0, en1, boltz
 
     # Pre-compute some random numbers.  This is faster than
     # using lots of individual calls.  "scale" sets the width
     # of the distribution for the angle changes - increases
     # with temperature.
     cdef double scale = 0.1 + Ts
-    cdef long[:, :] random_rows = np.random.randint(0, high=nmax, size=(nmax,nmax))
-    cdef long[:, :] random_cols = np.random.randint(0, high=nmax, size=(nmax,nmax))
-    cdef double[:, :] random_changes = np.random.normal(scale=scale, size=(nmax,nmax))
+    if nmax % 2 == 1:
+        random_rows = np.random.randint(0, high=nmax, size=(nmax,nmax))
+        random_cols = np.random.randint(0, high=nmax, size=(nmax,nmax))
+        random_changes = np.random.normal(scale=scale, size=(nmax,nmax))
 
-    for i in range(nmax):
-        for j in range(nmax):
-            row = random_rows[i, j]
-            col = random_cols[i, j]
-            change = random_changes[i, j]
+        for i in range(nmax):
+            for j in range(nmax):
+                row = random_rows[i, j]
+                col = random_cols[i, j]
+                change = random_changes[i, j]
 
-            energy_before = one_energy(lattice, row, col, nmax)
-            lattice[row, col] += change
-            energy_after = one_energy(lattice, row, col, nmax)
+                energy_before = one_energy(lattice, row, col, nmax)
+                lattice[row, col] += change
+                energy_after = one_energy(lattice, row, col, nmax)
 
-            if energy_after <= energy_before:
-                accept += 1
-            else:
-                # Now apply the Monte Carlo test - compare
-                # exp( -(E_new - E_old) / T* ) >= rand(0,1)
-                boltzmann = exp(-(energy_after - energy_before) / Ts)
-                if boltzmann >= np.random.uniform(0.0, 1.0):
+                if energy_after <= energy_before:
                     accept += 1
                 else:
-                    lattice[row, col] -= change
+                    # Now apply the Monte Carlo test - compare
+                    # exp( -(E_new - E_old) / T* ) >= rand(0,1)
+                    boltzmann = exp(-(energy_after - energy_before) / Ts)
+                    if boltzmann >= np.random.uniform(0.0, 1.0):
+                        accept += 1
+                    else:
+                        lattice[row, col] -= change
+    else:
+        # Pre-compute some random numbers for both masks at once.
+        # Masks are since the lattice is bipartite, we can update one mask at a time.
+        first_mask = np.indices((nmax,nmax)).sum(axis=0) % 2
+        second_mask = 1 - first_mask
+        aran = np.random.normal(scale=scale, size=(nmax,nmax))
+        for mask in [first_mask, second_mask]:
+            # Drawn once per mask, in the same order as the numpy version
+            uran = np.random.uniform(0.0, 1.0, size=(nmax, nmax))
+            # Sites in one mask only have neighbours in the other mask, so updating
+            # one site never changes the energy of another site in the same mask.
+            for i in range(nmax):
+                for j in range(nmax):
+                    if mask[i, j] == 1:
+                        # Energy of the site with its 4 neighbours, before the change
+                        old = lattice[i, j]
+                        en0 = one_energy(lattice, i, j, nmax)
+
+                        # Trial lattice: only this site is rotated
+                        trial = old + aran[i, j]
+                        lattice[i, j] = trial
+                        en1 = one_energy(lattice, i, j, nmax)
+
+                        # Metropolis / montecarlo test: exp( -(E_new - E_old) / T* ) >= rand(0,1)
+                        boltz = exp(-(en1 - en0) / Ts)
+                        if boltz >= uran[i, j]:
+                            accept += 1
+                        else:
+                            lattice[i, j] = old
     return accept/(nmax*nmax)
 #=======================================================================
 def main(program, nsteps, nmax, temp, pflag, seeded=0):
